@@ -3,34 +3,98 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { supabase, type Comment, type Topic } from "@/lib/supabase";
+import { containsNgWord } from "@/lib/ngwords";
 
 function sortByLikes(comments: Comment[]): Comment[] {
   return [...comments].sort((a, b) => b.likes - a.likes);
 }
 
+// ---------- ShareBar ----------
+
+function ShareBar({ title }: { title: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const url = typeof window !== "undefined" ? window.location.href : "";
+  const text = encodeURIComponent(`【討論】${title}`);
+  const encodedUrl = encodeURIComponent(url);
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="flex items-center justify-center gap-3 border-t border-gray-100 pt-4 pb-1">
+      <a
+        href={`https://twitter.com/intent/tweet?text=${text}&url=${encodedUrl}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-4 py-1.5 text-xs font-medium text-gray-700 transition hover:border-gray-400"
+      >
+        𝕏 でシェア
+      </a>
+      <a
+        href={`https://social-plugins.line.me/lineit/share?url=${encodedUrl}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-4 py-1.5 text-xs font-medium text-gray-700 transition hover:border-gray-400"
+      >
+        LINE でシェア
+      </a>
+      <button
+        onClick={handleCopy}
+        className="flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-4 py-1.5 text-xs font-medium text-gray-700 transition hover:border-gray-400"
+      >
+        {copied ? "✓ コピー済み" : "URLをコピー"}
+      </button>
+    </div>
+  );
+}
+
+// ---------- CommentCard ----------
+
 function CommentCard({
   comment,
   onLike,
+  onReport,
 }: {
   comment: Comment;
   onLike: (id: string, currentLikes: number) => void;
+  onReport: (id: string) => void;
 }) {
+  const handleReport = () => {
+    if (window.confirm("このコメントを通報しますか？")) {
+      onReport(comment.id);
+    }
+  };
+
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-      <p className="text-sm text-gray-800 leading-relaxed">{comment.content}</p>
+    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+      <p className="text-sm leading-7 text-gray-800">{comment.content}</p>
       <div className="mt-3 flex items-center justify-between">
-        <span className="text-xs text-gray-500">{comment.author}</span>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-gray-500">{comment.author}</span>
+          <button
+            onClick={handleReport}
+            className="text-xs text-gray-300 hover:text-red-400 transition"
+          >
+            通報
+          </button>
+        </div>
         <button
           onClick={() => onLike(comment.id, comment.likes)}
-          className="flex items-center gap-1 rounded-full border border-gray-300 px-3 py-1 text-xs text-gray-600 transition hover:border-pink-400 hover:text-pink-500"
+          className="flex items-center gap-1 rounded-full border border-gray-200 px-3 py-1 text-xs text-gray-600 transition hover:border-pink-400 hover:text-pink-500"
         >
           <span>👍</span>
-          <span>{comment.likes}</span>
+          <span className="font-medium">{comment.likes}</span>
         </button>
       </div>
     </div>
   );
 }
+
+// ---------- CommentForm ----------
 
 function CommentForm({
   onSubmit,
@@ -42,10 +106,18 @@ function CommentForm({
   const [content, setContent] = useState("");
   const [author, setAuthor] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [ngError, setNgError] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!content.trim() || !author.trim()) return;
+
+    if (containsNgWord(content) || containsNgWord(author)) {
+      setNgError(true);
+      setTimeout(() => setNgError(false), 3000);
+      return;
+    }
+
     setSubmitting(true);
     await onSubmit(content.trim(), author.trim());
     setContent("");
@@ -60,24 +132,29 @@ function CommentForm({
 
   return (
     <form onSubmit={handleSubmit} className="mt-4 space-y-2">
+      {ngError && (
+        <p className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-600">
+          不適切な言葉が含まれています。修正してください。
+        </p>
+      )}
       <input
         type="text"
         placeholder="投稿者名"
         value={author}
         onChange={(e) => setAuthor(e.target.value)}
-        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-gray-400"
+        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-gray-400"
       />
       <textarea
         placeholder="コメントを入力..."
         value={content}
         onChange={(e) => setContent(e.target.value)}
         rows={3}
-        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-gray-400 resize-none"
+        className="w-full resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-gray-400"
       />
       <button
         type="submit"
         disabled={submitting}
-        className={`w-full rounded-md px-4 py-2 text-sm font-medium text-white transition ${accentClass}`}
+        className={`w-full rounded-lg px-4 py-2 text-sm font-medium text-white transition ${accentClass}`}
       >
         {submitting ? "投稿中..." : "投稿する"}
       </button>
@@ -85,47 +162,65 @@ function CommentForm({
   );
 }
 
+// ---------- CommentColumn ----------
+
 function CommentColumn({
   title,
   comments,
   side,
   onLike,
+  onReport,
   onSubmit,
 }: {
   title: string;
   comments: Comment[];
   side: "pro" | "con";
   onLike: (id: string, currentLikes: number) => void;
+  onReport: (id: string) => void;
   onSubmit: (content: string, author: string) => Promise<void>;
 }) {
   const headerClass =
     side === "pro"
-      ? "border-blue-500 text-blue-700"
-      : "border-red-500 text-red-700";
+      ? "border-blue-500 text-blue-700 bg-blue-50"
+      : "border-red-500 text-red-700 bg-red-50";
+
+  const badgeClass =
+    side === "pro"
+      ? "bg-blue-100 text-blue-600"
+      : "bg-red-100 text-red-600";
 
   return (
     <div className="flex flex-col">
-      <h2 className={`border-l-4 pl-3 text-lg font-semibold mb-4 ${headerClass}`}>
-        {title}
-        <span className="ml-2 text-sm font-normal text-gray-500">
-          ({comments.length}件)
+      <div className={`mb-4 flex items-center gap-2 rounded-lg border-l-4 px-4 py-2.5 ${headerClass}`}>
+        <h2 className="text-base font-bold">{title}</h2>
+        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${badgeClass}`}>
+          {comments.length}件
         </span>
-      </h2>
-      <div className="space-y-3 flex-1">
+      </div>
+
+      <div className="max-h-[520px] overflow-y-auto space-y-3 pr-1 flex-1">
         {comments.length === 0 ? (
-          <p className="text-sm text-gray-400 text-center py-8">
+          <p className="py-12 text-center text-sm text-gray-400">
             まだコメントがありません
           </p>
         ) : (
           comments.map((c) => (
-            <CommentCard key={c.id} comment={c} onLike={onLike} />
+            <CommentCard
+              key={c.id}
+              comment={c}
+              onLike={onLike}
+              onReport={onReport}
+            />
           ))
         )}
       </div>
+
       <CommentForm onSubmit={onSubmit} side={side} />
     </div>
   );
 }
+
+// ---------- DebateClient ----------
 
 export default function DebateClient({ topicId }: { topicId: number }) {
   const [topic, setTopic] = useState<Topic | null>(null);
@@ -161,11 +256,14 @@ export default function DebateClient({ topicId }: { topicId: number }) {
       await fetchComments();
       setLoading(false);
     };
-
     fetchAll();
   }, [topicId, fetchComments]);
 
-  const handleSubmit = async (side: "pro" | "con", content: string, author: string) => {
+  const handleSubmit = async (
+    side: "pro" | "con",
+    content: string,
+    author: string
+  ) => {
     const { error } = await supabase
       .from("comments")
       .insert({ topic_id: topicId, side, content, author });
@@ -184,46 +282,64 @@ export default function DebateClient({ topicId }: { topicId: number }) {
     await fetchComments();
   };
 
+  const handleReport = async (id: string) => {
+    await supabase
+      .from("comments")
+      .update({ del_flg: 1 })
+      .eq("id", id);
+
+    await fetchComments();
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200 px-6 py-6 text-center">
-        <button
-          onClick={() => router.push("/")}
-          className="mb-4 text-xs text-gray-400 hover:text-gray-600 transition"
-        >
-          ← トピック一覧に戻る
-        </button>
-        <p className="text-xs font-medium uppercase tracking-widest text-gray-400 mb-2">
-          今日のお題
-        </p>
-        <h1 className="text-2xl font-bold text-gray-900">
-          {topic ? topic.title : "読み込み中..."}
-        </h1>
-        {topic?.description && (
-          <p className="mt-2 text-sm text-gray-500 max-w-xl mx-auto">
-            {topic.description}
+      <header className="bg-white border-b border-gray-200">
+        <div className="mx-auto max-w-5xl px-4 py-6">
+          <button
+            onClick={() => router.push("/")}
+            className="mb-3 text-xs text-gray-400 hover:text-gray-600 transition"
+          >
+            ← トピック一覧に戻る
+          </button>
+          <p className="text-xs font-medium uppercase tracking-widest text-gray-400">
+            今日のお題
           </p>
-        )}
+          <h1 className="mt-1 text-xl font-bold leading-snug text-gray-900 sm:text-2xl">
+            {topic ? topic.title : "読み込み中..."}
+          </h1>
+          {topic?.description && (
+            <p className="mt-2 text-sm leading-relaxed text-gray-500">
+              {topic.description}
+            </p>
+          )}
+          {topic && <ShareBar title={topic.title} />}
+        </div>
       </header>
 
       <main className="mx-auto max-w-5xl px-4 py-8">
         {loading ? (
-          <p className="text-center text-sm text-gray-400 py-20">読み込み中...</p>
+          <p className="py-20 text-center text-sm text-gray-400">読み込み中...</p>
         ) : (
-          <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             <CommentColumn
               title="賛成"
               comments={proComments}
               side="pro"
               onLike={handleLike}
-              onSubmit={(content, author) => handleSubmit("pro", content, author)}
+              onReport={handleReport}
+              onSubmit={(content, author) =>
+                handleSubmit("pro", content, author)
+              }
             />
             <CommentColumn
               title="反対"
               comments={conComments}
               side="con"
               onLike={handleLike}
-              onSubmit={(content, author) => handleSubmit("con", content, author)}
+              onReport={handleReport}
+              onSubmit={(content, author) =>
+                handleSubmit("con", content, author)
+              }
             />
           </div>
         )}
