@@ -21,5 +21,6 @@ export type Comment = {
   content: string;
   author: string;
   likes: number;
+  del_flg: number;
   created_at: string;
 };

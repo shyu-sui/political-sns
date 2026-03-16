@@ -15,7 +15,7 @@ export default function TopicsPage() {
     const fetchTopics = async () => {
       const [{ data: topicsData }, { data: commentsData }] = await Promise.all([
         supabase.from("topics").select("*").eq("del_flg", 0),
-        supabase.from("comments").select("topic_id, created_at"),
+        supabase.from("comments").select("topic_id, created_at").eq("del_flg", 0),
       ]);
 
       if (!topicsData) {

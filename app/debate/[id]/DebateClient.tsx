@@ -139,6 +139,7 @@ export default function DebateClient({ topicId }: { topicId: number }) {
       .from("comments")
       .select("*")
       .eq("topic_id", topicId)
+      .eq("del_flg", 0)
       .order("likes", { ascending: false });
 
     if (error || !data) return;
