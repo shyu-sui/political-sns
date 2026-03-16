@@ -1,9 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { supabase, type Comment } from "@/lib/supabase";
-
-const TOPIC = "日本は原子力発電を再稼働すべきか？";
+import { useRouter } from "next/navigation";
+import { supabase, type Comment, type Topic } from "@/lib/supabase";
 
 function sortByLikes(comments: Comment[]): Comment[] {
   return [...comments].sort((a, b) => b.likes - a.likes);
@@ -128,15 +127,18 @@ function CommentColumn({
   );
 }
 
-export default function DebateClient() {
+export default function DebateClient({ topicId }: { topicId: number }) {
+  const [topic, setTopic] = useState<Topic | null>(null);
   const [proComments, setProComments] = useState<Comment[]>([]);
   const [conComments, setConComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
+  const router = useRouter();
 
   const fetchComments = useCallback(async () => {
     const { data, error } = await supabase
       .from("comments")
       .select("*")
+      .eq("topic_id", topicId)
       .order("likes", { ascending: false });
 
     if (error || !data) return;
@@ -144,25 +146,34 @@ export default function DebateClient() {
     const comments = data as Comment[];
     setProComments(sortByLikes(comments.filter((c) => c.side === "pro")));
     setConComments(sortByLikes(comments.filter((c) => c.side === "con")));
-  }, []);
+  }, [topicId]);
 
   useEffect(() => {
-    fetchComments().finally(() => setLoading(false));
-  }, [fetchComments]);
+    const fetchAll = async () => {
+      const { data: topicData } = await supabase
+        .from("topics")
+        .select("*")
+        .eq("id", topicId)
+        .single();
+
+      if (topicData) setTopic(topicData as Topic);
+      await fetchComments();
+      setLoading(false);
+    };
+
+    fetchAll();
+  }, [topicId, fetchComments]);
 
   const handleSubmit = async (side: "pro" | "con", content: string, author: string) => {
     const { error } = await supabase
       .from("comments")
-      .insert({ side, content, author });
+      .insert({ topic_id: topicId, side, content, author });
 
     if (error) return;
     await fetchComments();
   };
 
-  const handleLike = async (
-    id: string,
-    currentLikes: number
-  ) => {
+  const handleLike = async (id: string, currentLikes: number) => {
     const { error } = await supabase
       .from("comments")
       .update({ likes: currentLikes + 1 })
@@ -175,10 +186,23 @@ export default function DebateClient() {
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-200 px-6 py-6 text-center">
+        <button
+          onClick={() => router.push("/")}
+          className="mb-4 text-xs text-gray-400 hover:text-gray-600 transition"
+        >
+          ← トピック一覧に戻る
+        </button>
         <p className="text-xs font-medium uppercase tracking-widest text-gray-400 mb-2">
           今日のお題
         </p>
-        <h1 className="text-2xl font-bold text-gray-900">{TOPIC}</h1>
+        <h1 className="text-2xl font-bold text-gray-900">
+          {topic ? topic.title : "読み込み中..."}
+        </h1>
+        {topic?.description && (
+          <p className="mt-2 text-sm text-gray-500 max-w-xl mx-auto">
+            {topic.description}
+          </p>
+        )}
       </header>
 
       <main className="mx-auto max-w-5xl px-4 py-8">
