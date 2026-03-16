@@ -75,6 +75,12 @@ export default function TopicsPage() {
           <p className="mt-1 text-sm text-gray-500">
             社会問題・政治テーマについて討論しよう
           </p>
+          <button
+            onClick={() => router.push("/topics/new")}
+            className="mt-5 inline-flex items-center gap-1.5 rounded-full bg-blue-600 px-5 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
+          >
+            <span>＋</span> 議題を作成する
+          </button>
         </div>
       </header>
 
