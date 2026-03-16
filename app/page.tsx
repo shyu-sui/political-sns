@@ -4,21 +4,51 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase, type Topic } from "@/lib/supabase";
 
+type TopicWithLatest = Topic & { latestCommentAt: string | null };
+
 export default function TopicsPage() {
-  const [topics, setTopics] = useState<Topic[]>([]);
+  const [topics, setTopics] = useState<TopicWithLatest[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
   useEffect(() => {
-    supabase
-      .from("topics")
-      .select("*")
-      .eq("del_flg", 0)
-      .order("updated_at", { ascending: false })
-      .then(({ data, error }) => {
-        if (!error && data) setTopics(data as Topic[]);
+    const fetchTopics = async () => {
+      const [{ data: topicsData }, { data: commentsData }] = await Promise.all([
+        supabase.from("topics").select("*").eq("del_flg", 0),
+        supabase.from("comments").select("topic_id, created_at"),
+      ]);
+
+      if (!topicsData) {
         setLoading(false);
+        return;
+      }
+
+      // topic_id ごとの最新 created_at を集計
+      const latestMap = new Map<number, string>();
+      for (const c of commentsData ?? []) {
+        const current = latestMap.get(c.topic_id);
+        if (!current || c.created_at > current) {
+          latestMap.set(c.topic_id, c.created_at);
+        }
+      }
+
+      // latestCommentAt を付与して降順ソート
+      const merged: TopicWithLatest[] = (topicsData as Topic[]).map((t) => ({
+        ...t,
+        latestCommentAt: latestMap.get(t.id) ?? null,
+      }));
+
+      merged.sort((a, b) => {
+        const dateA = a.latestCommentAt ?? a.created_at;
+        const dateB = b.latestCommentAt ?? b.created_at;
+        return dateB > dateA ? 1 : -1;
       });
+
+      setTopics(merged);
+      setLoading(false);
+    };
+
+    fetchTopics();
   }, []);
 
   return (
@@ -49,7 +79,9 @@ export default function TopicsPage() {
                     </p>
                   )}
                   <p className="mt-2 text-xs text-gray-400">
-                    更新日時：{new Date(topic.updated_at).toLocaleString("ja-JP")}
+                    {topic.latestCommentAt
+                      ? `最終コメント：${new Date(topic.latestCommentAt).toLocaleString("ja-JP")}`
+                      : "コメントなし"}
                   </p>
                 </button>
               </li>
