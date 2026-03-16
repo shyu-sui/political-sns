@@ -4,9 +4,12 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { supabase, type Comment, type Topic } from "@/lib/supabase";
 import { containsNgWord } from "@/lib/ngwords";
+import { getUserHash } from "@/lib/userHash";
 
-function sortByLikes(comments: Comment[]): Comment[] {
-  return [...comments].sort((a, b) => b.likes - a.likes);
+type CommentWithStats = Comment & { likeCount: number; isLiked: boolean };
+
+function sortByLikes(comments: CommentWithStats[]): CommentWithStats[] {
+  return [...comments].sort((a, b) => b.likeCount - a.likeCount);
 }
 
 // ---------- ShareBar ----------
@@ -59,8 +62,8 @@ function CommentCard({
   onLike,
   onReport,
 }: {
-  comment: Comment;
-  onLike: (id: string, currentLikes: number) => void;
+  comment: CommentWithStats;
+  onLike: (id: string) => void;
   onReport: (id: string) => void;
 }) {
   const handleReport = () => {
@@ -83,11 +86,15 @@ function CommentCard({
           </button>
         </div>
         <button
-          onClick={() => onLike(comment.id, comment.likes)}
-          className="flex items-center gap-1 rounded-full border border-gray-200 px-3 py-1 text-xs text-gray-600 transition hover:border-pink-400 hover:text-pink-500"
+          onClick={() => onLike(comment.id)}
+          className={`flex items-center gap-1 rounded-full border px-3 py-1 text-xs transition ${
+            comment.isLiked
+              ? "border-pink-300 bg-pink-50 text-pink-400 hover:border-pink-400 hover:bg-pink-100"
+              : "border-gray-200 text-gray-600 hover:border-pink-400 hover:text-pink-500"
+          }`}
         >
           <span>👍</span>
-          <span className="font-medium">{comment.likes}</span>
+          <span className="font-medium">{comment.likeCount}</span>
         </button>
       </div>
     </div>
@@ -173,9 +180,9 @@ function CommentColumn({
   onSubmit,
 }: {
   title: string;
-  comments: Comment[];
+  comments: CommentWithStats[];
   side: "pro" | "con";
-  onLike: (id: string, currentLikes: number) => void;
+  onLike: (id: string) => void;
   onReport: (id: string) => void;
   onSubmit: (content: string, author: string) => Promise<void>;
 }) {
@@ -224,27 +231,55 @@ function CommentColumn({
 
 export default function DebateClient({ topicId }: { topicId: number }) {
   const [topic, setTopic] = useState<Topic | null>(null);
-  const [proComments, setProComments] = useState<Comment[]>([]);
-  const [conComments, setConComments] = useState<Comment[]>([]);
+  const [proComments, setProComments] = useState<CommentWithStats[]>([]);
+  const [conComments, setConComments] = useState<CommentWithStats[]>([]);
   const [loading, setLoading] = useState(true);
+  const [userHash, setUserHash] = useState("");
   const router = useRouter();
 
-  const fetchComments = useCallback(async () => {
-    const { data, error } = await supabase
+  useEffect(() => {
+    setUserHash(getUserHash());
+  }, []);
+
+  const fetchComments = useCallback(async (hash: string) => {
+    const { data: commentsData, error } = await supabase
       .from("comments")
       .select("*")
       .eq("topic_id", topicId)
-      .eq("del_flg", 0)
-      .order("likes", { ascending: false });
+      .eq("del_flg", 0);
 
-    if (error || !data) return;
+    if (error || !commentsData) return;
 
-    const comments = data as Comment[];
-    setProComments(sortByLikes(comments.filter((c) => c.side === "pro")));
-    setConComments(sortByLikes(comments.filter((c) => c.side === "con")));
+    const comments = commentsData as Comment[];
+    const commentIds = comments.map((c) => c.id);
+
+    // comment_likes を一括取得
+    const { data: likesData } = await supabase
+      .from("comment_likes")
+      .select("comment_id, user_hash")
+      .in("comment_id", commentIds.length > 0 ? commentIds : [""]);
+
+    const likes = likesData ?? [];
+    const likesCountMap = new Map<string, number>();
+    const likedSet = new Set<string>();
+
+    for (const l of likes) {
+      likesCountMap.set(l.comment_id, (likesCountMap.get(l.comment_id) ?? 0) + 1);
+      if (l.user_hash === hash) likedSet.add(l.comment_id);
+    }
+
+    const withStats: CommentWithStats[] = comments.map((c) => ({
+      ...c,
+      likeCount: likesCountMap.get(c.id) ?? 0,
+      isLiked: likedSet.has(c.id),
+    }));
+
+    setProComments(sortByLikes(withStats.filter((c) => c.side === "pro")));
+    setConComments(sortByLikes(withStats.filter((c) => c.side === "con")));
   }, [topicId]);
 
   useEffect(() => {
+    if (!userHash) return;
     const fetchAll = async () => {
       const { data: topicData } = await supabase
         .from("topics")
@@ -253,11 +288,11 @@ export default function DebateClient({ topicId }: { topicId: number }) {
         .single();
 
       if (topicData) setTopic(topicData as Topic);
-      await fetchComments();
+      await fetchComments(userHash);
       setLoading(false);
     };
     fetchAll();
-  }, [topicId, fetchComments]);
+  }, [topicId, userHash, fetchComments]);
 
   const handleSubmit = async (
     side: "pro" | "con",
@@ -269,26 +304,33 @@ export default function DebateClient({ topicId }: { topicId: number }) {
       .insert({ topic_id: topicId, side, content, author });
 
     if (error) return;
-    await fetchComments();
+    await fetchComments(userHash);
   };
 
-  const handleLike = async (id: string, currentLikes: number) => {
-    const { error } = await supabase
-      .from("comments")
-      .update({ likes: currentLikes + 1 })
-      .eq("id", id);
+  const handleLike = async (id: string) => {
+    const isLiked =
+      proComments.find((c) => c.id === id)?.isLiked ??
+      conComments.find((c) => c.id === id)?.isLiked ??
+      false;
 
-    if (error) return;
-    await fetchComments();
+    if (isLiked) {
+      await supabase
+        .from("comment_likes")
+        .delete()
+        .eq("comment_id", id)
+        .eq("user_hash", userHash);
+    } else {
+      await supabase
+        .from("comment_likes")
+        .insert({ comment_id: id, user_hash: userHash });
+    }
+
+    await fetchComments(userHash);
   };
 
   const handleReport = async (id: string) => {
-    await supabase
-      .from("comments")
-      .update({ del_flg: 1 })
-      .eq("id", id);
-
-    await fetchComments();
+    await supabase.from("comments").update({ del_flg: 1 }).eq("id", id);
+    await fetchComments(userHash);
   };
 
   return (

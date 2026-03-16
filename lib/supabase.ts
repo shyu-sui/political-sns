@@ -14,6 +14,13 @@ export type Topic = {
   del_flg: number;
 };
 
+export type CommentLike = {
+  id: number;
+  comment_id: string;
+  user_hash: string;
+  created_at: string;
+};
+
 export type Comment = {
   id: string;
   topic_id: number;
