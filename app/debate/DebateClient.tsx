@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { supabase, type Comment } from "@/lib/supabase";
 
 const TOPIC = "日本は原子力発電を再稼働すべきか？";
@@ -128,54 +128,48 @@ function CommentColumn({
   );
 }
 
-export default function DebateClient({
-  initialPro,
-  initialCon,
-}: {
-  initialPro: Comment[];
-  initialCon: Comment[];
-}) {
-  const [proComments, setProComments] = useState<Comment[]>(sortByLikes(initialPro));
-  const [conComments, setConComments] = useState<Comment[]>(sortByLikes(initialCon));
+export default function DebateClient() {
+  const [proComments, setProComments] = useState<Comment[]>([]);
+  const [conComments, setConComments] = useState<Comment[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const handleSubmit = async (side: "pro" | "con", content: string, author: string) => {
+  const fetchComments = useCallback(async () => {
     const { data, error } = await supabase
       .from("comments")
-      .insert({ side, content, author })
-      .select()
-      .single();
+      .select("*")
+      .order("likes", { ascending: false });
 
     if (error || !data) return;
 
-    if (side === "pro") {
-      setProComments((prev) => sortByLikes([...prev, data as Comment]));
-    } else {
-      setConComments((prev) => sortByLikes([...prev, data as Comment]));
-    }
+    const comments = data as Comment[];
+    setProComments(sortByLikes(comments.filter((c) => c.side === "pro")));
+    setConComments(sortByLikes(comments.filter((c) => c.side === "con")));
+  }, []);
+
+  useEffect(() => {
+    fetchComments().finally(() => setLoading(false));
+  }, [fetchComments]);
+
+  const handleSubmit = async (side: "pro" | "con", content: string, author: string) => {
+    const { error } = await supabase
+      .from("comments")
+      .insert({ side, content, author });
+
+    if (error) return;
+    await fetchComments();
   };
 
   const handleLike = async (
-    side: "pro" | "con",
     id: string,
     currentLikes: number
   ) => {
-    const newLikes = currentLikes + 1;
-
     const { error } = await supabase
       .from("comments")
-      .update({ likes: newLikes })
+      .update({ likes: currentLikes + 1 })
       .eq("id", id);
 
     if (error) return;
-
-    const updater = (prev: Comment[]) =>
-      sortByLikes(prev.map((c) => (c.id === id ? { ...c, likes: newLikes } : c)));
-
-    if (side === "pro") {
-      setProComments(updater);
-    } else {
-      setConComments(updater);
-    }
+    await fetchComments();
   };
 
   return (
@@ -188,22 +182,26 @@ export default function DebateClient({
       </header>
 
       <main className="mx-auto max-w-5xl px-4 py-8">
-        <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
-          <CommentColumn
-            title="賛成"
-            comments={proComments}
-            side="pro"
-            onLike={(id, likes) => handleLike("pro", id, likes)}
-            onSubmit={(content, author) => handleSubmit("pro", content, author)}
-          />
-          <CommentColumn
-            title="反対"
-            comments={conComments}
-            side="con"
-            onLike={(id, likes) => handleLike("con", id, likes)}
-            onSubmit={(content, author) => handleSubmit("con", content, author)}
-          />
-        </div>
+        {loading ? (
+          <p className="text-center text-sm text-gray-400 py-20">読み込み中...</p>
+        ) : (
+          <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
+            <CommentColumn
+              title="賛成"
+              comments={proComments}
+              side="pro"
+              onLike={handleLike}
+              onSubmit={(content, author) => handleSubmit("pro", content, author)}
+            />
+            <CommentColumn
+              title="反対"
+              comments={conComments}
+              side="con"
+              onLike={handleLike}
+              onSubmit={(content, author) => handleSubmit("con", content, author)}
+            />
+          </div>
+        )}
       </main>
     </div>
   );
