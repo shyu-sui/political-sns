@@ -12,6 +12,20 @@ function sortByLikes(comments: CommentWithStats[]): CommentWithStats[] {
   return [...comments].sort((a, b) => b.likeCount - a.likeCount);
 }
 
+// いいね順でソート済みの賛成・反対を交互にマージ
+function mergeAlternating(
+  pros: CommentWithStats[],
+  cons: CommentWithStats[]
+): (CommentWithStats & { side: "pro" | "con" })[] {
+  const result: (CommentWithStats & { side: "pro" | "con" })[] = [];
+  const max = Math.max(pros.length, cons.length);
+  for (let i = 0; i < max; i++) {
+    if (pros[i]) result.push({ ...pros[i], side: "pro" });
+    if (cons[i]) result.push({ ...cons[i], side: "con" });
+  }
+  return result;
+}
+
 // ---------- ShareBar ----------
 
 function ShareBar({ title }: { title: string }) {
@@ -28,7 +42,7 @@ function ShareBar({ title }: { title: string }) {
   };
 
   return (
-    <div className="flex items-center justify-center gap-3 border-t border-gray-100 pt-4 pb-1">
+    <div className="flex flex-wrap items-center justify-center gap-2 border-t border-gray-100 pt-4 pb-1">
       <a
         href={`https://twitter.com/intent/tweet?text=${text}&url=${encodedUrl}`}
         target="_blank"
@@ -61,10 +75,12 @@ function CommentCard({
   comment,
   onLike,
   onReport,
+  sideBadge,
 }: {
   comment: CommentWithStats;
   onLike: (id: string) => void;
   onReport: (id: string) => void;
+  sideBadge?: "pro" | "con";
 }) {
   const handleReport = () => {
     if (window.confirm("このコメントを通報しますか？")) {
@@ -74,6 +90,17 @@ function CommentCard({
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+      {sideBadge && (
+        <span
+          className={`mb-2 inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
+            sideBadge === "pro"
+              ? "bg-blue-100 text-blue-600"
+              : "bg-red-100 text-red-600"
+          }`}
+        >
+          {sideBadge === "pro" ? "賛成" : "反対"}
+        </span>
+      )}
       <p className="text-sm leading-7 text-gray-800">{comment.content}</p>
       <div className="mt-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -87,7 +114,7 @@ function CommentCard({
         </div>
         <button
           onClick={() => onLike(comment.id)}
-          className={`flex items-center gap-1 rounded-full border px-3 py-1 text-xs transition ${
+          className={`flex items-center gap-1 rounded-full border px-3 py-2 text-xs transition ${
             comment.isLiked
               ? "border-pink-300 bg-pink-50 text-pink-400 hover:border-pink-400 hover:bg-pink-100"
               : "border-gray-200 text-gray-600 hover:border-pink-400 hover:text-pink-500"
@@ -169,7 +196,7 @@ function CommentForm({
   );
 }
 
-// ---------- CommentColumn ----------
+// ---------- CommentColumn (PC用) ----------
 
 function CommentColumn({
   title,
@@ -333,6 +360,8 @@ export default function DebateClient({ topicId }: { topicId: number }) {
     await fetchComments(userHash);
   };
 
+  const mergedComments = mergeAlternating(proComments, conComments);
+
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-200">
@@ -362,28 +391,78 @@ export default function DebateClient({ topicId }: { topicId: number }) {
         {loading ? (
           <p className="py-20 text-center text-sm text-gray-400">読み込み中...</p>
         ) : (
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-            <CommentColumn
-              title="賛成"
-              comments={proComments}
-              side="pro"
-              onLike={handleLike}
-              onReport={handleReport}
-              onSubmit={(content, author) =>
-                handleSubmit("pro", content, author)
-              }
-            />
-            <CommentColumn
-              title="反対"
-              comments={conComments}
-              side="con"
-              onLike={handleLike}
-              onReport={handleReport}
-              onSubmit={(content, author) =>
-                handleSubmit("con", content, author)
-              }
-            />
-          </div>
+          <>
+            {/* PC: 2カラム */}
+            <div className="hidden md:grid grid-cols-2 gap-6">
+              <CommentColumn
+                title="賛成"
+                comments={proComments}
+                side="pro"
+                onLike={handleLike}
+                onReport={handleReport}
+                onSubmit={(content, author) =>
+                  handleSubmit("pro", content, author)
+                }
+              />
+              <CommentColumn
+                title="反対"
+                comments={conComments}
+                side="con"
+                onLike={handleLike}
+                onReport={handleReport}
+                onSubmit={(content, author) =>
+                  handleSubmit("con", content, author)
+                }
+              />
+            </div>
+
+            {/* スマホ: 交互フラットリスト + 賛成/反対フォーム */}
+            <div className="md:hidden space-y-3">
+              {mergedComments.length === 0 ? (
+                <p className="py-12 text-center text-sm text-gray-400">
+                  まだコメントがありません
+                </p>
+              ) : (
+                mergedComments.map((c) => (
+                  <CommentCard
+                    key={c.id}
+                    comment={c}
+                    onLike={handleLike}
+                    onReport={handleReport}
+                    sideBadge={c.side}
+                  />
+                ))
+              )}
+
+              {/* 賛成フォーム */}
+              <div className="mt-6 rounded-xl border border-blue-100 bg-blue-50 p-4">
+                <div className="mb-2 flex items-center gap-2">
+                  <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-600">賛成</span>
+                  <span className="text-xs text-blue-700 font-medium">として投稿</span>
+                </div>
+                <CommentForm
+                  onSubmit={(content, author) =>
+                    handleSubmit("pro", content, author)
+                  }
+                  side="pro"
+                />
+              </div>
+
+              {/* 反対フォーム */}
+              <div className="mt-4 rounded-xl border border-red-100 bg-red-50 p-4">
+                <div className="mb-2 flex items-center gap-2">
+                  <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-600">反対</span>
+                  <span className="text-xs text-red-700 font-medium">として投稿</span>
+                </div>
+                <CommentForm
+                  onSubmit={(content, author) =>
+                    handleSubmit("con", content, author)
+                  }
+                  side="con"
+                />
+              </div>
+            </div>
+          </>
         )}
       </main>
     </div>
