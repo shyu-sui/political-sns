@@ -356,7 +356,13 @@ export default function DebateClient({ topicId }: { topicId: number }) {
   };
 
   const handleReport = async (id: string) => {
-    await supabase.from("comments").update({ del_flg: 1 }).eq("id", id);
+    const { error } = await supabase.rpc("report_comment", {
+      target_comment_id: id,
+    });
+    if (error) {
+      console.error("通報に失敗しました", error);
+      return;
+    }
     await fetchComments(userHash);
   };
 
