@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 
 export default function NewTopicPage() {
@@ -101,6 +102,14 @@ export default function NewTopicPage() {
           >
             {submitting ? "作成中..." : "議題を作成して討論を始める"}
           </button>
+
+          <p className="text-center text-xs text-gray-400">
+            投稿することで
+            <Link href="/terms" className="underline hover:text-gray-600 transition">
+              利用規約
+            </Link>
+            に同意したものとみなします
+          </p>
         </form>
       </main>
     </div>

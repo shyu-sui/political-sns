@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { supabase, type Comment, type Topic } from "@/lib/supabase";
 import { containsNgWord } from "@/lib/ngwords";
 import { getUserHash } from "@/lib/userHash";
@@ -192,6 +193,14 @@ function CommentForm({
       >
         {submitting ? "投稿中..." : "投稿する"}
       </button>
+
+      <p className="text-center text-xs text-gray-400">
+        投稿することで
+        <Link href="/terms" className="underline hover:text-gray-600 transition">
+          利用規約
+        </Link>
+        に同意したものとみなします
+      </p>
     </form>
   );
 }

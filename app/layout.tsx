@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist } from "next/font/google";
 import { Analytics } from "@vercel/analytics/react";
+import Link from "next/link";
 import "./globals.css";
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-geist-sans" });
@@ -36,6 +37,14 @@ export default function RootLayout({
     <html lang="ja">
       <body className={`${geist.variable} font-sans antialiased`}>
         {children}
+        <footer className="border-t border-gray-200 bg-white py-6 text-center text-xs text-gray-400">
+          <p className="mb-1 font-medium text-gray-500">PoliDebate</p>
+          <nav className="flex justify-center gap-4">
+            <Link href="/terms" className="hover:text-gray-600 transition">
+              利用規約
+            </Link>
+          </nav>
+        </footer>
         <Analytics />
       </body>
     </html>
