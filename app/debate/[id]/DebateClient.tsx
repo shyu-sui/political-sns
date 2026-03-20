@@ -133,11 +133,10 @@ function CommentCard({
 
 function CommentForm({
   onSubmit,
-  side,
 }: {
-  onSubmit: (content: string, author: string) => Promise<void>;
-  side: "pro" | "con";
+  onSubmit: (content: string, author: string, side: "pro" | "con") => Promise<void>;
 }) {
+  const [side, setSide] = useState<"pro" | "con">("pro");
   const [content, setContent] = useState("");
   const [author, setAuthor] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -154,19 +153,42 @@ function CommentForm({
     }
 
     setSubmitting(true);
-    await onSubmit(content.trim(), author.trim());
+    await onSubmit(content.trim(), author.trim(), side);
     setContent("");
     setAuthor("");
     setSubmitting(false);
   };
 
-  const accentClass =
-    side === "pro"
-      ? "bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300"
-      : "bg-red-600 hover:bg-red-700 disabled:bg-red-300";
+  const isPro = side === "pro";
 
   return (
-    <form onSubmit={handleSubmit} className="mt-4 space-y-2">
+    <form onSubmit={handleSubmit} className="space-y-3">
+      {/* 賛成 / 反対 切り替え */}
+      <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setSide("pro")}
+          className={`flex-1 py-2.5 text-sm font-semibold transition ${
+            isPro
+              ? "bg-blue-600 text-white"
+              : "bg-white text-gray-400 hover:text-blue-500"
+          }`}
+        >
+          賛成
+        </button>
+        <button
+          type="button"
+          onClick={() => setSide("con")}
+          className={`flex-1 py-2.5 text-sm font-semibold transition border-l border-gray-200 ${
+            !isPro
+              ? "bg-red-600 text-white"
+              : "bg-white text-gray-400 hover:text-red-500"
+          }`}
+        >
+          反対
+        </button>
+      </div>
+
       {ngError && (
         <p className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-600">
           不適切な言葉が含まれています。修正してください。
@@ -189,9 +211,13 @@ function CommentForm({
       <button
         type="submit"
         disabled={submitting}
-        className={`w-full rounded-lg px-4 py-2 text-sm font-medium text-white transition ${accentClass}`}
+        className={`w-full rounded-lg px-4 py-2 text-sm font-medium text-white transition ${
+          isPro
+            ? "bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300"
+            : "bg-red-600 hover:bg-red-700 disabled:bg-red-300"
+        }`}
       >
-        {submitting ? "投稿中..." : "投稿する"}
+        {submitting ? "投稿中..." : `${isPro ? "賛成" : "反対"}として投稿`}
       </button>
 
       <p className="text-center text-xs text-gray-400">
@@ -213,14 +239,12 @@ function CommentColumn({
   side,
   onLike,
   onReport,
-  onSubmit,
 }: {
   title: string;
   comments: CommentWithStats[];
   side: "pro" | "con";
   onLike: (id: string) => void;
   onReport: (id: string) => void;
-  onSubmit: (content: string, author: string) => Promise<void>;
 }) {
   const headerClass =
     side === "pro"
@@ -257,8 +281,6 @@ function CommentColumn({
           ))
         )}
       </div>
-
-      <CommentForm onSubmit={onSubmit} side={side} />
     </div>
   );
 }
@@ -331,9 +353,9 @@ export default function DebateClient({ topicId }: { topicId: number }) {
   }, [topicId, userHash, fetchComments]);
 
   const handleSubmit = async (
-    side: "pro" | "con",
     content: string,
-    author: string
+    author: string,
+    side: "pro" | "con"
   ) => {
     const { error } = await supabase
       .from("comments")
@@ -407,7 +429,7 @@ export default function DebateClient({ topicId }: { topicId: number }) {
           <p className="py-20 text-center text-sm text-gray-400">読み込み中...</p>
         ) : (
           <>
-            {/* PC: 2カラム */}
+            {/* PC: 2カラム（コメント一覧） */}
             <div className="hidden md:grid grid-cols-2 gap-6">
               <CommentColumn
                 title="賛成"
@@ -415,9 +437,6 @@ export default function DebateClient({ topicId }: { topicId: number }) {
                 side="pro"
                 onLike={handleLike}
                 onReport={handleReport}
-                onSubmit={(content, author) =>
-                  handleSubmit("pro", content, author)
-                }
               />
               <CommentColumn
                 title="反対"
@@ -425,13 +444,10 @@ export default function DebateClient({ topicId }: { topicId: number }) {
                 side="con"
                 onLike={handleLike}
                 onReport={handleReport}
-                onSubmit={(content, author) =>
-                  handleSubmit("con", content, author)
-                }
               />
             </div>
 
-            {/* スマホ: 交互フラットリスト + 賛成/反対フォーム */}
+            {/* スマホ: 交互フラットリスト */}
             <div className="md:hidden space-y-3">
               {mergedComments.length === 0 ? (
                 <p className="py-12 text-center text-sm text-gray-400">
@@ -448,34 +464,12 @@ export default function DebateClient({ topicId }: { topicId: number }) {
                   />
                 ))
               )}
+            </div>
 
-              {/* 賛成フォーム */}
-              <div className="mt-6 rounded-xl border border-blue-100 bg-blue-50 p-4">
-                <div className="mb-2 flex items-center gap-2">
-                  <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-600">賛成</span>
-                  <span className="text-xs text-blue-700 font-medium">として投稿</span>
-                </div>
-                <CommentForm
-                  onSubmit={(content, author) =>
-                    handleSubmit("pro", content, author)
-                  }
-                  side="pro"
-                />
-              </div>
-
-              {/* 反対フォーム */}
-              <div className="mt-4 rounded-xl border border-red-100 bg-red-50 p-4">
-                <div className="mb-2 flex items-center gap-2">
-                  <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-600">反対</span>
-                  <span className="text-xs text-red-700 font-medium">として投稿</span>
-                </div>
-                <CommentForm
-                  onSubmit={(content, author) =>
-                    handleSubmit("con", content, author)
-                  }
-                  side="con"
-                />
-              </div>
+            {/* 統合投稿フォーム（PC・スマホ共通） */}
+            <div className="mt-8 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+              <p className="mb-4 text-sm font-semibold text-gray-700">コメントを投稿</p>
+              <CommentForm onSubmit={handleSubmit} />
             </div>
           </>
         )}

@@ -11,7 +11,8 @@
       "Bash(find /c/app/political-sns-mvp/political-sns -type f \\\\\\(-name *.sql -o -name *supabase* -o -name *migration* \\\\\\))",
       "Bash(ls:*)",
       "Bash(git log:*)",
-      "Bash(cd:*)"
+      "Bash(cd:*)",
+      "Bash(xargs sed:*)"
     ]
   }
 }
