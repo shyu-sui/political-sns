@@ -12,7 +12,8 @@
       "Bash(ls:*)",
       "Bash(git log:*)",
       "Bash(cd:*)",
-      "Bash(xargs sed:*)"
+      "Bash(xargs sed:*)",
+      "Bash(rm:*)"
     ]
   }
 }

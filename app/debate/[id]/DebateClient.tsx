@@ -142,9 +142,13 @@ function CommentForm({
   const [submitting, setSubmitting] = useState(false);
   const [ngError, setNgError] = useState(false);
 
+  const AUTHOR_MAX = 30;
+  const CONTENT_MAX = 400;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!content.trim() || !author.trim()) return;
+    if (author.length > AUTHOR_MAX || content.length > CONTENT_MAX) return;
 
     if (containsNgWord(content) || containsNgWord(author)) {
       setNgError(true);
@@ -194,20 +198,32 @@ function CommentForm({
           不適切な言葉が含まれています。修正してください。
         </p>
       )}
-      <input
-        type="text"
-        placeholder="投稿者名"
-        value={author}
-        onChange={(e) => setAuthor(e.target.value)}
-        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-gray-400"
-      />
-      <textarea
-        placeholder="コメントを入力..."
-        value={content}
-        onChange={(e) => setContent(e.target.value)}
-        rows={3}
-        className="w-full resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-gray-400"
-      />
+      <div>
+        <input
+          type="text"
+          placeholder="投稿者名"
+          value={author}
+          onChange={(e) => setAuthor(e.target.value)}
+          maxLength={AUTHOR_MAX}
+          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-gray-400"
+        />
+        <p className="mt-1 text-right text-xs text-gray-400">
+          {author.length} / {AUTHOR_MAX}
+        </p>
+      </div>
+      <div>
+        <textarea
+          placeholder="コメントを入力..."
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+          maxLength={CONTENT_MAX}
+          rows={3}
+          className="w-full resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-gray-400"
+        />
+        <p className="mt-1 text-right text-xs text-gray-400">
+          {content.length} / {CONTENT_MAX}
+        </p>
+      </div>
       <button
         type="submit"
         disabled={submitting}
